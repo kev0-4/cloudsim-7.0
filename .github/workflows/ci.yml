@@ -26,5 +26,5 @@ jobs:
       working-directory: .
 
     - name: Run simulation
-      run: mvn -B exec:java -pl modules/cloudsim-examples -Dexec.mainClass=org.cloudbus.cloudsim.examples.CustomerWorkloadSimulation
+      run: mvn exec:java -pl modules/cloudsim-examples/ -Dexec.mainClass=org.cloudbus.cloudsim.examples.CustomerWorkloadSimulation
       working-directory: .
