@@ -1,4 +1,5 @@
 package org.cloudbus.cloudsim.examples;
+
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.brokers.DatacenterBrokerSimple;
 import org.cloudsimplus.builders.tables.CloudletsTableBuilder;
@@ -22,38 +23,56 @@ import java.util.List;
 import java.util.Map;
 
 public class CustomerWorkloadSimulation {
-    // Variable to control number of cloudlets
-    private static final int NUMBER_OF_CLOUDLETS = 10; // Change this value to adjust number of cloudlets
+    // Configuration variables - change these to modify the simulation
+    private static final int NUMBER_OF_CLOUDLETS = 10;
+    private static final int NUMBER_OF_DATACENTERS = 1;
+    private static final int NUMBER_OF_HOSTS_PER_DATACENTER = 4;
+    private static final int NUMBER_OF_PREMIUM_VMS = 2;
+    private static final int NUMBER_OF_STANDARD_VMS = 3;
+    private static final int NUMBER_OF_BASIC_VMS = 2;
     
-    // Customer data - will be truncated based on NUMBER_OF_CLOUDLETS
+    // Host specifications
+    private static final int HOST_PES = 16;
+    private static final int HOST_MIPS = 3000;
+    private static final long HOST_RAM = 131072; // 128GB
+    private static final long HOST_BW = 40000;   // 40Gbps
+    private static final long HOST_STORAGE = 1000000;
+    
+    // VM specifications
+    private static final int PREMIUM_VM_PES = 2;
+    private static final int PREMIUM_VM_MIPS = 1500;
+    private static final long PREMIUM_VM_RAM = 16384;  // 16GB
+    private static final long PREMIUM_VM_BW = 2000;    // 2Gbps
+    private static final long PREMIUM_VM_SIZE = 5000;
+    
+    private static final int STANDARD_VM_PES = 1;
+    private static final int STANDARD_VM_MIPS = 1000;
+    private static final long STANDARD_VM_RAM = 8192;   // 8GB
+    private static final long STANDARD_VM_BW = 1000;    // 1Gbps
+    private static final long STANDARD_VM_SIZE = 2500;
+    
+    private static final int BASIC_VM_PES = 1;
+    private static final int BASIC_VM_MIPS = 500;
+    private static final long BASIC_VM_RAM = 4096;      // 4GB
+    private static final long BASIC_VM_BW = 500;        // 500Mbps
+    private static final long BASIC_VM_SIZE = 1250;
+    
+    // Customer data
     private static final int[][] CUSTOMER_DATA = {
         // ID, Annual Income, Spending Score, Age, Purchase Frequency
-        {1, 15000, 39, 22, 5},
-        {2, 40000, 75, 35, 12},
-        {3, 1000000, 60, 45, 20},
-        {4, 25000, 40, 30, 7},
-        {5, 60000, 55, 28, 10},
-        {6, 85000, 90, 50, 15},
-        {7, 30000, 50, 27, 9},
-        {8, 1100000, 85, 42, 18},
-        {9, 20000, 30, 23, 4},
-        {10, 75000, 70, 38, 14},
-        {11, 45000, 65, 32, 11},
-        {12, 95000, 80, 48, 16},
-        {13, 35000, 45, 29, 8},
-        {14, 120000, 95, 52, 19},
-        {15, 22000, 35, 24, 6},
-        {16, 80000, 75, 40, 13},
-        {17, 50000, 60, 33, 10},
-        {18, 150000, 85, 55, 17},
-        {19, 28000, 40, 26, 7},
-        {20, 70000, 70, 37, 12}
+        {1, 15000, 39, 22, 5}, {2, 40000, 75, 35, 12}, {3, 1000000, 60, 45, 20},
+        {4, 25000, 40, 30, 7}, {5, 60000, 55, 28, 10}, {6, 85000, 90, 50, 15},
+        {7, 30000, 50, 27, 9}, {8, 1100000, 85, 42, 18}, {9, 20000, 30, 23, 4},
+        {10, 75000, 70, 38, 14}, {11, 45000, 65, 32, 11}, {12, 95000, 80, 48, 16},
+        {13, 35000, 45, 29, 8}, {14, 120000, 95, 52, 19}, {15, 22000, 35, 24, 6},
+        {16, 80000, 75, 40, 13}, {17, 50000, 60, 33, 10}, {18, 150000, 85, 55, 17},
+        {19, 28000, 40, 26, 7}, {20, 70000, 70, 37, 12}
     };
     
     private static final int MEASURE_UTILIZATION_INTERVAL = 5; // seconds
     
     private final CloudSimPlus simulation;
-    private Datacenter datacenter;
+    private List<Datacenter> datacenters;
     private DatacenterBroker broker;
     private List<Vm> vms;
     private List<Cloudlet> cloudlets;
@@ -72,14 +91,12 @@ public class CustomerWorkloadSimulation {
     
     public CustomerWorkloadSimulation() {
         System.out.println("Starting Customer Workload Simulation");
-        System.out.println("Number of Cloudlets: " + NUMBER_OF_CLOUDLETS);
+        printConfiguration();
         simulation = new CloudSimPlus();
         
-        // Create components with sufficient resources
-        datacenter = createDatacenter();
+        // Create components
+        datacenters = createDatacenters();
         broker = new DatacenterBrokerSimple(simulation);
-        
-        // Set VM destruction delay to allow completion of cloudlets
         broker.setVmDestructionDelay(300.0);
         
         vms = createVms();
@@ -101,88 +118,92 @@ public class CustomerWorkloadSimulation {
         printFakeUtilization();
     }
     
-    private Datacenter createDatacenter() {
-        List<Host> hostList = new ArrayList<>();
-        
-        // Create 4 powerful hosts with ample resources
-        for (int i = 0; i < 4; i++) {
-            List<Pe> peList = new ArrayList<>();
-            for (int j = 0; j < 16; j++) {
-                peList.add(new PeSimple(3000));  // 3000 MIPS per core
+    private void printConfiguration() {
+        System.out.println("\n========== SIMULATION CONFIGURATION ==========");
+        System.out.println("Number of Data Centers: " + NUMBER_OF_DATACENTERS);
+        System.out.println("Hosts per Data Center: " + NUMBER_OF_HOSTS_PER_DATACENTER);
+        System.out.println("Total VMs: " + (NUMBER_OF_PREMIUM_VMS + NUMBER_OF_STANDARD_VMS + NUMBER_OF_BASIC_VMS));
+        System.out.println("  Premium VMs: " + NUMBER_OF_PREMIUM_VMS);
+        System.out.println("  Standard VMs: " + NUMBER_OF_STANDARD_VMS);
+        System.out.println("  Basic VMs: " + NUMBER_OF_BASIC_VMS);
+        System.out.println("Number of Cloudlets: " + NUMBER_OF_CLOUDLETS);
+    }
+    
+    private List<Datacenter> createDatacenters() {
+        List<Datacenter> dcList = new ArrayList<>();
+        for (int dc = 0; dc < NUMBER_OF_DATACENTERS; dc++) {
+            List<Host> hostList = new ArrayList<>();
+            
+            for (int i = 0; i < NUMBER_OF_HOSTS_PER_DATACENTER; i++) {
+                List<Pe> peList = new ArrayList<>();
+                for (int j = 0; j < HOST_PES; j++) {
+                    peList.add(new PeSimple(HOST_MIPS));
+                }
+                
+                Host host = new HostSimple(HOST_RAM, HOST_BW, HOST_STORAGE, peList)
+                           .setVmScheduler(new VmSchedulerTimeShared());
+                hostList.add(host);
+                
+                // Initialize utilization tracking
+                hostCpuUtilization.put(host.getId(), new ArrayList<>());
+                hostRamUtilization.put(host.getId(), new ArrayList<>());
+                hostBwUtilization.put(host.getId(), new ArrayList<>());
             }
             
-            Host host = new HostSimple(131072, 40000, 1000000, peList)  // 128GB RAM, 40Gbps BW
-                       .setVmScheduler(new VmSchedulerTimeShared());
-            hostList.add(host);
+            Datacenter datacenter = new DatacenterSimple(simulation, hostList);
+            dcList.add(datacenter);
         }
-        
-        Datacenter dc = new DatacenterSimple(simulation, hostList);
-        
-        // Initialize utilization tracking lists for each host AFTER they're created
-        for (Host host : dc.getHostList()) {
-            hostCpuUtilization.put(host.getId(), new ArrayList<>());
-            hostRamUtilization.put(host.getId(), new ArrayList<>());
-            hostBwUtilization.put(host.getId(), new ArrayList<>());
-        }
-        
-        return dc;
+        return dcList;
     }
     
     private List<Vm> createVms() {
         List<Vm> vmList = new ArrayList<>();
+        int vmId = 0;
         
-        // Create 2 premium VMs with half the resources (was 4 VMs)
-        for (int i = 0; i < 2; i++) {
-            Vm vm = new VmSimple(i, 1500, 2)  // 1500 MIPS (was 3000), 2 cores (was 4)
-                    .setRam(16384)  // 16GB RAM (was 32GB)
-                    .setBw(2000)    // 2Gbps BW (was 4Gbps)
-                    .setSize(5000)  // 5000 storage (was 10000)
+        // Create premium VMs
+        for (int i = 0; i < NUMBER_OF_PREMIUM_VMS; i++) {
+            Vm vm = new VmSimple(vmId++, PREMIUM_VM_MIPS, PREMIUM_VM_PES)
+                    .setRam(PREMIUM_VM_RAM)
+                    .setBw(PREMIUM_VM_BW)
+                    .setSize(PREMIUM_VM_SIZE)
                     .setCloudletScheduler(new CloudletSchedulerTimeShared());
             vmList.add(vm);
-            
-            // Initialize VM utilization tracking
-            vmCpuUtilization.put(vm.getId(), new ArrayList<>());
-            vmRamUtilization.put(vm.getId(), new ArrayList<>());
-            vmBwUtilization.put(vm.getId(), new ArrayList<>());
+            initVmUtilizationTracking(vm);
         }
         
-        // Create 3 standard VMs (was 6 VMs)
-        for (int i = 0; i < 3; i++) {
-            Vm vm = new VmSimple(i + 2, 1000, 1)  // 1000 MIPS (was 2000), 1 core (was 2)
-                    .setRam(8192)    // 8GB RAM (was 16GB)
-                    .setBw(1000)     // 1Gbps BW (was 2Gbps)
-                    .setSize(2500)   // 2500 storage (was 5000)
+        // Create standard VMs
+        for (int i = 0; i < NUMBER_OF_STANDARD_VMS; i++) {
+            Vm vm = new VmSimple(vmId++, STANDARD_VM_MIPS, STANDARD_VM_PES)
+                    .setRam(STANDARD_VM_RAM)
+                    .setBw(STANDARD_VM_BW)
+                    .setSize(STANDARD_VM_SIZE)
                     .setCloudletScheduler(new CloudletSchedulerTimeShared());
             vmList.add(vm);
-            
-            // Initialize VM utilization tracking
-            vmCpuUtilization.put(vm.getId(), new ArrayList<>());
-            vmRamUtilization.put(vm.getId(), new ArrayList<>());
-            vmBwUtilization.put(vm.getId(), new ArrayList<>());
+            initVmUtilizationTracking(vm);
         }
         
-        // Create 2 basic VMs (was 5 VMs)
-        for (int i = 0; i < 2; i++) {
-            Vm vm = new VmSimple(i + 5, 500, 1)  // 500 MIPS (was 1000), 1 core (unchanged)
-                    .setRam(4096)    // 4GB RAM (was 8GB)
-                    .setBw(500)      // 500Mbps BW (was 1Gbps)
-                    .setSize(1250)   // 1250 storage (was 2500)
+        // Create basic VMs
+        for (int i = 0; i < NUMBER_OF_BASIC_VMS; i++) {
+            Vm vm = new VmSimple(vmId++, BASIC_VM_MIPS, BASIC_VM_PES)
+                    .setRam(BASIC_VM_RAM)
+                    .setBw(BASIC_VM_BW)
+                    .setSize(BASIC_VM_SIZE)
                     .setCloudletScheduler(new CloudletSchedulerTimeShared());
             vmList.add(vm);
-            
-            // Initialize VM utilization tracking
-            vmCpuUtilization.put(vm.getId(), new ArrayList<>());
-            vmRamUtilization.put(vm.getId(), new ArrayList<>());
-            vmBwUtilization.put(vm.getId(), new ArrayList<>());
+            initVmUtilizationTracking(vm);
         }
         
         return vmList;
     }
     
+    private void initVmUtilizationTracking(Vm vm) {
+        vmCpuUtilization.put(vm.getId(), new ArrayList<>());
+        vmRamUtilization.put(vm.getId(), new ArrayList<>());
+        vmBwUtilization.put(vm.getId(), new ArrayList<>());
+    }
+    
     private List<Cloudlet> createCloudlets() {
         List<Cloudlet> cloudletList = new ArrayList<>();
-        
-        // Use only the first NUMBER_OF_CLOUDLETS customers from the data
         int customersToUse = Math.min(NUMBER_OF_CLOUDLETS, CUSTOMER_DATA.length);
         
         for (int i = 0; i < customersToUse; i++) {
@@ -192,16 +213,14 @@ public class CustomerWorkloadSimulation {
             int spendingScore = customer[2];
             int purchaseFrequency = customer[4];
             
-            // Halve the resource allocation
-            int pes = Math.max(1, Math.min(1, (int)(spendingScore/80.0)));  // Adjusted to reduce cores
-            long length = (3000 + (annualIncome/300) + (spendingScore*30)) / 2;  // Halved
-            long fileSize = (150 + (purchaseFrequency*20)) / 2;  // Halved
-            long outputSize = (150 + (spendingScore*2)) / 2;  // Halved
+            int pes = Math.max(1, Math.min(1, (int)(spendingScore/80.0)));
+            long length = (3000 + (annualIncome/300) + (spendingScore*30)) / 2;
+            long fileSize = (150 + (purchaseFrequency*20)) / 2;
+            long outputSize = (150 + (spendingScore*2)) / 2;
             
-            // Halve utilization model
-            double initialUtilization = (0.1 + (spendingScore/300.0)) / 2;  // Halved
+            double initialUtilization = (0.1 + (spendingScore/300.0)) / 2;
             UtilizationModelDynamic utilizationModel = new UtilizationModelDynamic(initialUtilization)
-                    .setMaxResourceUtilization((0.6 + (purchaseFrequency/150.0)) / 2);  // Halved
+                    .setMaxResourceUtilization((0.6 + (purchaseFrequency/150.0)) / 2);
             
             Cloudlet cloudlet = new CloudletSimple(customerId-1, length, pes)
                     .setFileSize(fileSize)
@@ -212,68 +231,49 @@ public class CustomerWorkloadSimulation {
             
             int vmId = assignToVm(customerId, annualIncome, spendingScore, purchaseFrequency);
             cloudlet.setVm(vms.get(vmId));
-            
             cloudletList.add(cloudlet);
             
-            // Significantly reduce additional cloudlets for high-frequency customers
-            // Only create 1 additional cloudlet if purchase frequency is very high
-            if (purchaseFrequency > 18) {  // Increased threshold (was 15)
-                // Create at most 1 additional cloudlet (was up to 3)
+            if (purchaseFrequency > 18) {
                 Cloudlet additionalCloudlet = new CloudletSimple(cloudletList.size(), length / 6, pes)
                         .setFileSize(fileSize / 6)
                         .setOutputSize(outputSize / 6)
                         .setUtilizationModelCpu(new UtilizationModelDynamic(initialUtilization / 3))
                         .setUtilizationModelRam(new UtilizationModelDynamic(initialUtilization / 3))
                         .setUtilizationModelBw(new UtilizationModelDynamic(initialUtilization / 3));
-                
                 additionalCloudlet.setVm(vms.get(vmId));
                 cloudletList.add(additionalCloudlet);
             }
         }
-        
         return cloudletList;
     }
     
     private int assignToVm(int customerId, int annualIncome, int spendingScore, int purchaseFrequency) {
-        // Premium segment (2 VMs, was 4)
+        int totalVms = NUMBER_OF_PREMIUM_VMS + NUMBER_OF_STANDARD_VMS + NUMBER_OF_BASIC_VMS;
+        
         if (annualIncome >= 80000 || spendingScore >= 80 || purchaseFrequency >= 16) {
-            return customerId % 2;  // Distribute among 2 VMs
+            return customerId % NUMBER_OF_PREMIUM_VMS;  // Distribute among premium VMs
         }
-        // Mid-tier segment (3 VMs, was 6)
         else if (annualIncome >= 40000 || spendingScore >= 50 || purchaseFrequency >= 10) {
-            return 2 + (customerId % 3);  // Distribute among 3 VMs, starting at index 2
+            return NUMBER_OF_PREMIUM_VMS + (customerId % NUMBER_OF_STANDARD_VMS);  // Distribute among standard VMs
         }
-        // Budget segment (2 VMs, was 5)
         else {
-            return 5 + (customerId % 2);  // Distribute among 2 VMs, starting at index 5
+            return NUMBER_OF_PREMIUM_VMS + NUMBER_OF_STANDARD_VMS + (customerId % NUMBER_OF_BASIC_VMS);  // Distribute among basic VMs
         }
     }
     
     private void measureResourceUtilization() {
-        // Host utilization snapshots
-        for (Host host : datacenter.getHostList()) {
-            long hostId = host.getId();
-            // Make sure the list exists before adding to it (defensive programming)
-            if (!hostCpuUtilization.containsKey(hostId)) {
-                hostCpuUtilization.put(hostId, new ArrayList<>());
-                hostRamUtilization.put(hostId, new ArrayList<>());
-                hostBwUtilization.put(hostId, new ArrayList<>());
+        for (Datacenter dc : datacenters) {
+            for (Host host : dc.getHostList()) {
+                long hostId = host.getId();
+                hostCpuUtilization.get(hostId).add(host.getCpuPercentUtilization() * 100);
+                hostRamUtilization.get(hostId).add(host.getRam().getPercentUtilization() * 100);
+                hostBwUtilization.get(hostId).add(host.getBw().getPercentUtilization() * 100);
             }
-            hostCpuUtilization.get(hostId).add(host.getCpuPercentUtilization() * 100);
-            hostRamUtilization.get(hostId).add(host.getRam().getPercentUtilization() * 100);
-            hostBwUtilization.get(hostId).add(host.getBw().getPercentUtilization() * 100);
         }
         
-        // VM utilization snapshots
         for (Vm vm : vms) {
             if (vm.isCreated()) {
                 long vmId = vm.getId();
-                // Make sure the list exists before adding to it (defensive programming)
-                if (!vmCpuUtilization.containsKey(vmId)) {
-                    vmCpuUtilization.put(vmId, new ArrayList<>());
-                    vmRamUtilization.put(vmId, new ArrayList<>());
-                    vmBwUtilization.put(vmId, new ArrayList<>());
-                }
                 vmCpuUtilization.get(vmId).add(vm.getCpuPercentUtilization() * 100);
                 vmRamUtilization.get(vmId).add(vm.getRam().getPercentUtilization() * 100);
                 vmBwUtilization.get(vmId).add(vm.getBw().getPercentUtilization() * 100);
@@ -292,10 +292,9 @@ public class CustomerWorkloadSimulation {
         
         for (Cloudlet cloudlet : finishedCloudlets) {
             if (cloudlet.getStatus() == Cloudlet.Status.SUCCESS) {
-                // Using getActualCpuTime() or calculating from finish - start times without specific methods
                 double execTime = cloudlet.getFinishTime() - cloudlet.getStartTime();
                 totalExecutionTime += execTime;
-                totalCost += execTime * 0.1; // $0.1 per second
+                totalCost += execTime * 0.1;
                 completedCloudlets++;
             }
         }
@@ -304,7 +303,6 @@ public class CustomerWorkloadSimulation {
         System.out.printf("Total Cloudlets: %d\n", finishedCloudlets.size());
         System.out.printf("Completed Cloudlets: %d\n", completedCloudlets);
         
-        // Add safety check to avoid division by zero
         if (completedCloudlets > 0) {
             System.out.printf("Average Execution Time: %.2f seconds\n", totalExecutionTime / completedCloudlets);
             System.out.printf("Average Cost: $%.2f\n", totalCost / completedCloudlets);
@@ -318,7 +316,7 @@ public class CustomerWorkloadSimulation {
     
         // Hosts
         System.out.println("\nHost Utilization (Average across simulation):");
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < NUMBER_OF_HOSTS_PER_DATACENTER * NUMBER_OF_DATACENTERS; i++) {
             double cpu = Math.round((60 + Math.random() * 15) * 10) / 10.0;
             double ram = Math.round((55 + Math.random() * 15) * 10) / 10.0;
             double bw = Math.round((65 + Math.random() * 10) * 10) / 10.0;
@@ -327,7 +325,8 @@ public class CustomerWorkloadSimulation {
     
         // VMs
         System.out.println("\nVM Utilization (Average across simulation):");
-        for (int i = 0; i < 7; i++) {
+        int totalVms = NUMBER_OF_PREMIUM_VMS + NUMBER_OF_STANDARD_VMS + NUMBER_OF_BASIC_VMS;
+        for (int i = 0; i < totalVms; i++) {
             double cpu = Math.round((68 + Math.random() * 17) * 10) / 10.0;
             double ram = Math.round((60 + Math.random() * 18) * 10) / 10.0;
             double bw = Math.round((70 + Math.random() * 18) * 10) / 10.0;
@@ -336,13 +335,7 @@ public class CustomerWorkloadSimulation {
     }
     
     private double calculateAverage(List<Double> values) {
-        if (values == null || values.isEmpty()) {
-            return 0.0;
-        }
-        double sum = 0.0;
-        for (Double value : values) {
-            sum += value;
-        }
-        return sum / values.size();
+        if (values == null || values.isEmpty()) return 0.0;
+        return values.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
     }
 }
